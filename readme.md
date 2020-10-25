@@ -1,4 +1,4 @@
-# Adversarial Contrastive Learning: Harvesting More Robustness from Unsupervised Pre-Training
+# Robust Pre-Training by Adversarial Contrastive Learning
 ## Introduction
 Recent work has shown that, when integrated with adversarial training, self-supervised 
 pre-training with several pretext tasks can lead to state-of-the-art robustness. In this 
@@ -21,43 +21,104 @@ Illustration of workflow comparison: (a) The original SimCLR framework, a.k.a., 
 (b) - (d) three proposed variants of our adversarial contrastive learning framework: A2A, A2S, and DS (our best solution). 
 Note that, whenever more than one encoder branches co-exist in one framework, they by default share all weights, except that adversarial and standard 
 encoders will use independent BN parameters.
-## Environment setup
-require: pytorch==1.6.0
+## Environment requirements
+* Python (3.6.4)
+* Pytorch (1.6.0)
+* CUDA
+* numpy
 
 ## Pretraining
 Pretrain the model on CIFAR-10 with ACL(DS)
 ```bash
-python train_simCLR.py ACL_DS --ACL_DS --data \path\to\data
+python train_simCLR.py ACL_DS --ACL_DS --data /path/to/data
 ```
 Pretrain the model on CIFAR-100 with ACL(DS)
 ```bash
-python train_simCLR.py ACL_DS_CIFAR100 --ACL_DS --dataset cifar100 --data \path\to\data
+python train_simCLR.py ACL_DS_CIFAR100 --ACL_DS --dataset cifar100 --data /path/to/data
 ```
 ## Finetuning
 Adversarial finetune ACL(DS) pretraining model on CIFAR-10 (Need to do ACL(DS) pretraining on CIFAR10 first)
 ```bash
-python train_trades.py ACL_DS_TUNE --checkpoint checkpoints/ACL_DS/model_1000.pt --cvt_state_dict --bnNameCnt 1
+python train_trades.py ACL_DS_TUNE --checkpoint checkpoints/ACL_DS/model_1000.pt --cvt_state_dict --bnNameCnt 1 --decreasing_lr 40,60 --epochs 100 --data /path/to/data
 ```
 Adversarial finetune ACL(DS) pretraining model on CIFAR-100 (Need to do ACL(DS) pretraining on CIFAR100 first)
 ```bash
-python train_trades.py ACL_DS_CIFAR100_TUNE --dataset cifar100 --checkpoint checkpoints/ACL_DS_CIFAR100/model_1000.pt --cvt_state_dict --bnNameCnt 1
+python train_trades.py ACL_DS_CIFAR100_TUNE --dataset cifar100 --checkpoint checkpoints/ACL_DS_CIFAR100/model_1000.pt --cvt_state_dict --bnNameCnt 1 --data /path/to/data
 ```
-# Semi-supervised adversarial training
+## Semi-supervised adversarial training
 On CIFAR-10 with 0.01 available labels (Need to do ACL(DS) pretraining on CIFAR10 first)
 ```bash
 # train the standard model for generating psudo labels
-python train_trades.py ACL_DS_SEMI_STAGE2_0.01LABELS --trainmode normal --trainset train0.01_idx --checkpoint checkpoints/ACL_DS/model_1000.pt --cvt_state_dict --bnNameCnt 0
+python train_trades.py ACL_DS_SEMI_STAGE2_0.01LABELS --trainmode normal --trainset train0.01_idx --checkpoint checkpoints/ACL_DS/model_1000.pt --cvt_state_dict --bnNameCnt 0 --decreasing_lr 40,60 --epochs 100 --data /path/to/data
 # Adversarial finetuning from ACL(DS) with the psudo labels
-python train_trades_cifar10_semisupervised.py ACL_DS_SEMI_STAGE3_0.01LABELS --checkpoint checkpoints/ACL_DS/model_1000.pt --bnNameCnt 1 --cvt_state_dict --checkpoint_clean checkpoints_trade/ACL_DS_SEMI_STAGE2_0.01LABELS/best_model.pt --percentageLabeledData 1
+python train_trades_cifar10_semisupervised.py ACL_DS_SEMI_STAGE3_0.01LABELS --checkpoint checkpoints/ACL_DS/model_1000.pt --bnNameCnt 1 --cvt_state_dict --decreasing_lr 5,10 --epochs 15 --checkpoint_clean checkpoints_trade/ACL_DS_SEMI_STAGE2_0.01LABELS/best_model.pt --percentageLabeledData 1 --data /path/to/data
 ```
 On CIFAR-10 with 0.1 available labels (Need to do ACL(DS) pretraining on CIFAR10 first)
 ```bash
 # train the standard model for generating psudo labels
-python train_trades.py ACL_DS_SEMI_STAGE2_0.1LABELS --trainmode normal --trainset train0.1_idx --checkpoint checkpoints/ACL_DS/model_1000.pt --cvt_state_dict --bnNameCnt 0
+python train_trades.py ACL_DS_SEMI_STAGE2_0.1LABELS --trainmode normal --trainset train0.1_idx --checkpoint checkpoints/ACL_DS/model_1000.pt --cvt_state_dict --bnNameCnt 0 --decreasing_lr 40,60 --epochs 100 --data /path/to/data
 # Adversarial finetuning from ACL(DS) with the psudo labels
-python train_trades_cifar10_semisupervised.py ACL_DS_SEMI_STAGE3_0.1LABELS --checkpoint checkpoints/ACL_DS/model_1000.pt --bnNameCnt 1 --cvt_state_dict --checkpoint_clean checkpoints_trade/ACL_DS_SEMI_STAGE2_0.1LABELS/best_model.pt --percentageLabeledData 10
+python train_trades_cifar10_semisupervised.py ACL_DS_SEMI_STAGE3_0.1LABELS --checkpoint checkpoints/ACL_DS/model_1000.pt --bnNameCnt 1 --cvt_state_dict --decreasing_lr 5,10 --epochs 15 --checkpoint_clean checkpoints_trade/ACL_DS_SEMI_STAGE2_0.1LABELS/best_model.pt --percentageLabeledData 10 --data /path/to/data
+```
+
+## Checkpoint
+
+### Pretraining
+[[ACL_DS]](https://drive.google.com/file/d/1d5gZgqMpXl0-RiWH6sUcBvZZXJc2OrRF/view?usp=sharing)
+
+To finetune from this checkpoint: use /path/to/downloadedCheckpoint for --checkpoint. For example
+```bash
+python train_trades.py ACL_DS_TUNE --checkpoint /path/to/downloadedCheckpoint --cvt_state_dict --bnNameCnt 1 --data /path/to/data
+```
+### Finetuning
+[[ACL_DS_TUNE]](https://drive.google.com/file/d/1zLK5OTxaPkWK-i7MaGor7RnLKRYY9p-l/view?usp=sharing)
+
+To evaluate:
+```bash
+python train_trades.py ACL_DS_TUNE --checkpoint /path/to/downloadedCheckpoint --eval-only --data /path/to/data
+```
+### Semi-supervised adversarial training
+[[ACL_DS_SEMI_STAGE2_0.01LABELS]](https://drive.google.com/file/d/1PfDJXyF-PnwbKW1GsdiZRKza7C2Co-X1/view?usp=sharing) 
+
+To evaluate:
+```bash
+python train_trades.py ACL_DS_SEMI_STAGE2_0.01LABELS --checkpoint /path/to/downloadedCheckpoint --eval-only --data /path/to/data
+```
+
+[[ACL_DS_SEMI_STAGE3_0.01LABELS]](https://drive.google.com/file/d/1y_2kz7VoGnSwfnWzb7KuB6ST01mvTnHw/view?usp=sharing)
+
+To evaluate:
+```bash
+python train_trades.py ACL_DS_SEMI_STAGE3_0.01LABELS --checkpoint /path/to/downloadedCheckpoint --eval-only --data /path/to/data
+```
+
+[[ACL_DS_SEMI_STAGE2_0.1LABELS]](https://drive.google.com/file/d/1SOwFTOU4aU-YzzaE3AN14OLnvXySrSBs/view?usp=sharing)
+
+To evaluate:
+```bash
+python train_trades.py ACL_DS_SEMI_STAGE2_0.1LABELS --checkpoint /path/to/downloadedCheckpoint --eval-only --data /path/to/data
+```
+
+[[ACL_DS_SEMI_STAGE3_0.1LABELS]](https://drive.google.com/file/d/1UNEQX38pRSGSw5Hee50Fn3nkXMVKnEW8/view?usp=sharing)
+
+To evaluate:
+```bash
+python train_trades.py ACL_DS_SEMI_STAGE3_0.1LABELS --checkpoint /path/to/downloadedCheckpoint --eval-only --data /path/to/data
+```
+
+## Test against unforeseen attacks
+1. Prepare the dataset CIFAR10-C
+```shell script
+wget https://zenodo.org/record/2535967/files/CIFAR-10-C.tar?download=1 --output-document 'CIFAR-10-C.tar'
+tar -xvf CIFAR-10-C.tar
+```
+2. Test against unforseen attacks with ACL_DS_TUNE (require ACL_DS_TUNE)
+```shell script
+for atk in gaussian_noise impulse_noise pixelate shot_noise spatter zoom_blur motion_blur saturate snow speckle_noise contrast elastic_transform frost brightness defocus_blur fog gaussian_blur glass_blur jpeg_compression
+do
+CUDA_VISIBLE_DEVICES=0 python test2adversarial.py ACL_DS_TUNE --checkpoint /path/to/ACL_DS_TUNE --attack_type ${atk}
+done
 ```
 
 # Acknowledge
-1. Trade fine-tuning code from [TRADE](https://github.com/yaodongyu/TRADES) (official code). 
-2. Semi-supervised fine-tuning code partially borrow from [UAT](https://github.com/deepmind/deepmind-research/tree/master/unsupervised_adversarial_training) (official code). 
+Trade fine-tuning code from [TRADE](https://github.com/yaodongyu/TRADES) (official code). 

@@ -179,14 +179,20 @@ class batch_norm_multiple(nn.Module):
 
 
 class proj_head(nn.Module):
-    def __init__(self, ch, bn_names=None):
+    def __init__(self, ch, bn_names=None, twoLayerProj=False):
         super(proj_head, self).__init__()
         self.in_features = ch
+        self.twoLayerProj = twoLayerProj
 
         self.fc1 = nn.Linear(ch, ch)
         self.bn1 = batch_norm_multiple(nn.BatchNorm1d, ch, bn_names)
         self.fc2 = nn.Linear(ch, ch, bias=False)
         self.bn2 = batch_norm_multiple(nn.BatchNorm1d, ch, bn_names)
+
+        if not twoLayerProj:
+            self.fc3 = nn.Linear(ch, ch, bias=False)
+            self.bn3 = batch_norm_multiple(nn.BatchNorm1d, ch, bn_names)
+
         self.relu = nn.ReLU(inplace=True)
 
     def forward(self, x, bn_name):
@@ -200,6 +206,12 @@ class proj_head(nn.Module):
 
         x = self.fc2(x)
         x = self.bn2([x, bn_name])
+
+        if self.twoLayerProj:
+            x = self.relu(x)
+
+            x = self.fc3(x)
+            x = self.bn3([x, bn_name])
 
         return x
 

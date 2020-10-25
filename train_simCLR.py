@@ -26,6 +26,7 @@ parser.add_argument('--optimizer', default='lars', type=str, help='optimizer typ
 parser.add_argument('--lr', default=5.0, type=float, help='optimizer lr')
 parser.add_argument('--scheduler', default='cosine', type=str, help='lr scheduler type')
 parser.add_argument('--ACL_DS', action='store_true', help='if specified, use pgd dual mode,(cal both adversarial and clean)')
+parser.add_argument('--twoLayerProj', action='store_true', help='if specified, use two layers linear head for simclr proj head')
 parser.add_argument('--pgd_iter', default=5, type=int, help='how many iterations employed to attack the model')
 parser.add_argument('--seed', type=int, default=1, help='random seed')
 
@@ -65,10 +66,10 @@ def main():
     model = resnet18(pretrained=False, bn_names=bn_names)
 
     ch = model.fc.in_features
-    model.fc = proj_head(ch, bn_names=bn_names)
+    model.fc = proj_head(ch, bn_names=bn_names, twoLayerProj=args.twoLayerProj)
     model.cuda()
     cudnn.benchmark = True
-    
+
     strength = 1.0
     rnd_color_jitter = transforms.RandomApply([transforms.ColorJitter(0.4 * strength, 0.4 * strength, 0.4 * strength, 0.1 * strength)], p=0.8 * strength)
     rnd_gray = transforms.RandomGrayscale(p=0.2 * strength)
@@ -147,7 +148,7 @@ def main():
             model.load_state_dict(checkpoint['state_dict'])
         else:
             model.load_state_dict(checkpoint)
-        
+
     if args.resume:
         if args.checkpoint == '':
             checkpoint = torch.load(os.path.join(save_dir, 'model.pt'))
@@ -195,7 +196,7 @@ def main():
 
 
 def train(train_loader, model, optimizer, scheduler, epoch, log, num_classes):
-    
+
     losses = AverageMeter()
     losses.reset()
     data_time_meter = AverageMeter()

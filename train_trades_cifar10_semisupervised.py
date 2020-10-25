@@ -20,7 +20,7 @@ from trades import reset_model
 from pdb import set_trace
 
 from models.resnet import resnet18
-# import utils
+from utils import pgd_attack
 from utils import logger, setup_seed, AverageMeter, eval_adv_test
 
 import time
@@ -109,77 +109,29 @@ def trade_loss_soft(model,
         model.eval()
         batch_size = len(x_natural)
         # generate adversarial example
-        x_adv = x_natural.detach() + 0.001 * torch.randn(x_natural.shape).cuda().detach()
-        if distance == 'l_inf':
-            for _ in range(perturb_steps):
-                x_adv.requires_grad_()
-                with torch.enable_grad():
-                    if flag_adv is None:
-                        loss_kl = criterion_kl(F.log_softmax(model.eval()(x_adv), dim=1),
-                                               F.softmax(model.eval()(x_natural), dim=1))
-                    else:
-                        loss_kl = criterion_kl(F.log_softmax(model.eval()(x_adv, flag_adv), dim=1),
-                                               F.softmax(model.eval()(x_natural, flag_adv), dim=1))
-                grad = torch.autograd.grad(loss_kl, [x_adv])[0]
-                x_adv = x_adv.detach() + step_size * torch.sign(grad.detach())
-                x_adv = torch.min(torch.max(x_adv, x_natural - epsilon), x_natural + epsilon)
-                x_adv = torch.clamp(x_adv, 0.0, 1.0)
-        elif distance == 'l_2':
-            assert False
-            delta = 0.001 * torch.randn(x_natural.shape).cuda().detach()
-            delta = Variable(delta.data, requires_grad=True)
-
-            # Setup optimizers
-            optimizer_delta = optim.SGD([delta], lr=epsilon / perturb_steps * 2)
-
-            for _ in range(perturb_steps):
-                adv = x_natural + delta
-
-                # optimize
-                optimizer_delta.zero_grad()
-                with torch.enable_grad():
-                    loss = (-1) * criterion_kl(F.log_softmax(model.eval()(adv), dim=1),
-                                               F.softmax(model.eval()(x_natural), dim=1))
-                loss.backward()
-                # renorming gradient
-                grad_norms = delta.grad.view(batch_size, -1).norm(p=2, dim=1)
-                delta.grad.div_(grad_norms.view(-1, 1, 1, 1))
-                # avoid nan or inf if gradient is 0
-                if (grad_norms == 0).any():
-                    delta.grad[grad_norms == 0] = torch.randn_like(delta.grad[grad_norms == 0])
-                optimizer_delta.step()
-
-                # projection
-                delta.data.add_(x_natural)
-                delta.data.clamp_(0, 1).sub_(x_natural)
-                delta.data.renorm_(p=2, dim=0, maxnorm=epsilon)
-            x_adv = Variable(x_natural + delta, requires_grad=False)
-        else:
-            assert False
-            x_adv = torch.clamp(x_adv, 0.0, 1.0)
-
-        x_adv = Variable(torch.clamp(x_adv, 0.0, 1.0), requires_grad=False)
+        y_atk = torch.cat([y, y_soft[y.shape[0]:].max(1)[1]])
+        x_adv = pgd_attack(model, x_natural, y_atk, None, alpha=step_size, eps=epsilon, iters=perturb_steps)
 
     # zero gradient
     optimizer.zero_grad()
     # calculate robust loss
     model.train()
+    assert trainmode == "adv"
 
     if flag_adv is None:
         logits = model(x_natural)
     else:
         logits = model(x_natural, flag_adv)
 
-    loss = F.cross_entropy(logits[:y.shape[0]], y, reduction='sum') * (1. - alpha) / batch_size + \
-           criterion_distill(logits[:y.shape[0]], y_soft[:y.shape[0]]) * y_soft[:y.shape[0]].shape[0] * (T * T * rate_distill * alpha) / batch_size + \
-           criterion_distill(logits[y.shape[0]:], y_soft[y.shape[0]:]) * y_soft[y.shape[0]:].shape[0] * (T * T * rate_distill) / batch_size
-
-    assert trainmode == "adv"
-
     if flag_adv is None:
         logits_adv = model(x_adv)
     else:
         logits_adv = model(x_adv, flag_adv)
+
+    loss = F.cross_entropy(logits_adv[:y.shape[0]], y, reduction='sum') * (1. - alpha) / batch_size + \
+           criterion_distill(logits_adv[:y.shape[0]], y_soft[:y.shape[0]]) * y_soft[:y.shape[0]].shape[0] * (T * T * rate_distill * alpha) / batch_size + \
+           criterion_distill(logits_adv[y.shape[0]:], y_soft[y.shape[0]:]) * y_soft[y.shape[0]:].shape[0] * (T * T * rate_distill) / batch_size
+
 
     loss_robust = (1.0 / batch_size) * criterion_kl(F.log_softmax(logits_adv, dim=1),
                                                     F.softmax(logits, dim=1))
@@ -315,6 +267,7 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='CIFAR-10: semi-supervised experiments')
     parser.add_argument('experiment', type=str, help='path to saving the model')
+    parser.add_argument('--data', type=str, default='../../data', help='location of the data')
     parser.add_argument('--lr', default=0.1, type=float, help='learning rate')
     parser.add_argument('--decreasing_lr', default='15,20', help='decreasing strategy')
     parser.add_argument('--checkpoint', default='', help='checkpoint')
@@ -373,9 +326,10 @@ if __name__ == '__main__':
     transform_test = transforms.Compose([
         transforms.ToTensor(),
     ])
-    train_datasets = torchvision.datasets.CIFAR10(root='../data', train=True, download=True, transform=transform_train)
-    train_datasets_psudolabeled = psudoSoftLabel_CIFAR10(root='../data', train=True, download=True, transform=transform_train, model=gene_net)
-    vali_datasets = torchvision.datasets.CIFAR10(root='../data', train=True, download=True, transform=transform_test)
+    train_datasets = torchvision.datasets.CIFAR10(root=args.data, train=True, download=True, transform=transform_train)
+    train_datasets_psudolabeled = psudoSoftLabel_CIFAR10(root=args.data, train=True, download=True, transform=transform_train, model=gene_net)
+    vali_datasets = torchvision.datasets.CIFAR10(root=args.data, train=True, download=True, transform=transform_test)
+    test_datasets = torchvision.datasets.CIFAR10(root=args.data, train=False, download=True, transform=transform_test)
 
     valid_idx = list(np.load('split/valid_idx_std.npy'))
     if args.percentageLabeledData == 10:
@@ -409,7 +363,7 @@ if __name__ == '__main__':
     print("len labeled_loader is {}, len psudolabeled_loader is {}".format(len(labeledPartloader), len(psudolabeledPartloader)))
 
     # test psudo label acc
-    test_datasets_psudolabeled = psudoSoftLabel_CIFAR10(root='../data', train=False, download=True, transform=transform_train, model=gene_net)
+    test_datasets_psudolabeled = psudoSoftLabel_CIFAR10(root=args.data, train=False, download=True, transform=transform_train, model=gene_net)
     test_psudolabeled_loader = torch.utils.data.DataLoader(test_datasets_psudolabeled,
                                                            batch_size=128,
                                                            shuffle=False, num_workers=4)
@@ -430,8 +384,10 @@ if __name__ == '__main__':
       vali_datasets,
       batch_size=args.batch_size, sampler=valid_sampler)
 
+    test_loader = torch.utils.data.DataLoader(test_datasets, batch_size=args.batch_size)
+
     # Data loader used for test
-    testdata_test = torchvision.datasets.CIFAR10(root='../data', train=False, download=True, transform=transform_test)
+    testdata_test = torchvision.datasets.CIFAR10(root=args.data, train=False, download=True, transform=transform_test)
     testdata_test_loader = torch.utils.data.DataLoader(testdata_test,
                                                        batch_size=128,
                                                        shuffle=False, num_workers=4)
@@ -524,17 +480,15 @@ if __name__ == '__main__':
                 'best_prec1': best_prec1,
             }, os.path.join(save_dir, 'ata_best_model.pt'))
 
-    # read best_model and ata_best_model for testing
-    checkpoint = torch.load(os.path.join(save_dir, 'ata_best_model.pt'))
-    net.load_state_dict(checkpoint['state_dict'])
-    _, natural_test_acc = eval_test(net, device, vali_loader, log)
-    robust_test_acc = eval_adv_test(net, device, vali_loader, epsilon=args.epsilon, alpha=args.step_size, criterion=F.cross_entropy, log=log, attack_iter=args.num_steps_test)
-    log.info("On the ata_best_model, test tacc is {}, test atacc is {}".format(natural_test_acc, robust_test_acc))
+        # read best_model and ata_best_model for testing
+        checkpoint = torch.load(os.path.join(save_dir, 'ata_best_model.pt'))
+        net.load_state_dict(checkpoint['state_dict'])
+        _, natural_test_acc = eval_test(net, device, test_loader, log)
+        robust_test_acc = eval_adv_test(net, device, test_loader, epsilon=args.epsilon, alpha=args.step_size, criterion=F.cross_entropy, log=log, attack_iter=args.num_steps_test)
+        log.info("On the ata_best_model, test tacc is {}, test atacc is {}".format(natural_test_acc, robust_test_acc))
 
-    checkpoint = torch.load(os.path.join(save_dir, 'best_model.pt'))
-    net.load_state_dict(checkpoint['state_dict'])
-    _, natural_test_acc = eval_test(net, device, vali_loader, log)
-    robust_test_acc = eval_adv_test(net, device, vali_loader, epsilon=args.epsilon, alpha=args.step_size, criterion=F.cross_entropy, log=log, attack_iter=args.num_steps_test)
-    log.info("On the best_model, test tacc is {}, test atacc is {}".format(natural_test_acc, robust_test_acc))
-
-
+        checkpoint = torch.load(os.path.join(save_dir, 'best_model.pt'))
+        net.load_state_dict(checkpoint['state_dict'])
+        _, natural_test_acc = eval_test(net, device, test_loader, log)
+        robust_test_acc = eval_adv_test(net, device, test_loader, epsilon=args.epsilon, alpha=args.step_size, criterion=F.cross_entropy, log=log, attack_iter=args.num_steps_test)
+        log.info("On the best_model, test tacc is {}, test atacc is {}".format(natural_test_acc, robust_test_acc))

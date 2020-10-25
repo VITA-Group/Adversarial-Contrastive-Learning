@@ -18,6 +18,7 @@ import copy
 
 parser = argparse.ArgumentParser(description='PyTorch CIFAR TRADES Adversarial Training')
 parser.add_argument('experiment', type=str, help='exp name')
+parser.add_argument('--data', type=str, default='../../data', help='location of the data')
 parser.add_argument('--dataset', default='cifar10', type=str, help='dataset to be used (cifar10 or cifar100)')
 parser.add_argument('--batch-size', type=int, default=128, metavar='N',
                     help='input batch size for training (default: 128)')
@@ -49,8 +50,8 @@ parser.add_argument('--log-interval', type=int, default=10, metavar='N',
                     help='how many batches to wait before logging training status')
 parser.add_argument('--save-freq', '-s', default=1, type=int, metavar='N',
                     help='save frequency')
-parser.add_argument('--run-mode', default='train', type=str,
-                    help='train or adv eval')
+parser.add_argument('--eval-only', action='store_true',
+                    help='if specified, eval the loaded model')
 parser.add_argument('--trainmode', default='adv', type=str,
                     help='adv or normal or test')
 parser.add_argument('--fixmode', default='f1', type=str,
@@ -96,14 +97,14 @@ transform_test = transforms.Compose([
 ])
 
 if args.dataset == 'cifar10':
-    train_datasets = torchvision.datasets.CIFAR10(root='../data', train=True, download=True, transform=transform_train)
-    vali_datasets = torchvision.datasets.CIFAR10(root='../data', train=True, download=True, transform=transform_test)
-    testset = torchvision.datasets.CIFAR10(root='../data', train=False, download=True, transform=transform_test)
+    train_datasets = torchvision.datasets.CIFAR10(root=args.data, train=True, download=True, transform=transform_train)
+    vali_datasets = torchvision.datasets.CIFAR10(root=args.data, train=True, download=True, transform=transform_test)
+    testset = torchvision.datasets.CIFAR10(root=args.data, train=False, download=True, transform=transform_test)
     num_classes = 10
 elif args.dataset == 'cifar100':
-    train_datasets = torchvision.datasets.CIFAR100(root='../data', train=True, download=True, transform=transform_train)
-    vali_datasets = torchvision.datasets.CIFAR100(root='../data', train=True, download=True, transform=transform_test)
-    testset = torchvision.datasets.CIFAR100(root='../data', train=False, download=True, transform=transform_test)
+    train_datasets = torchvision.datasets.CIFAR100(root=args.data, train=True, download=True, transform=transform_train)
+    vali_datasets = torchvision.datasets.CIFAR100(root=args.data, train=True, download=True, transform=transform_test)
+    testset = torchvision.datasets.CIFAR100(root=args.data, train=False, download=True, transform=transform_test)
     num_classes = 100
 else:
     print("dataset {} is not supported".format(args.dataset))
@@ -281,6 +282,13 @@ def main():
     else:
       log.info("cannot resume since lack of files")
       assert False
+
+  if args.eval_only:
+    assert args.checkpoint != ''
+    _, test_tacc = eval_test(model, device, test_loader, log)
+    test_atacc = eval_adv_test(model, device, test_loader, epsilon=args.epsilon, alpha=args.step_size, criterion=F.cross_entropy, log=log, attack_iter=args.num_steps_test)
+    log.info("On the {}, test tacc is {}, test atacc is {}".format(args.checkpoint, test_tacc, test_atacc))
+    return
 
   ta = []
   ata = []
