@@ -119,6 +119,14 @@ do
 CUDA_VISIBLE_DEVICES=0 python test2adversarial.py ACL_DS_TUNE --checkpoint /path/to/ACL_DS_TUNE --attack_type ${atk}
 done
 ```
-
+# Citation
+```bash
+@article{ACL2020,
+    title = {Robust Pre-Training by Adversarial Contrastive Learning},
+    author = {Ziyu Jiang and Tianlong Chen and Ting Chen and Zhangyang Wang},
+    booktitle = {Advances in Neural Information Processing Systems 34},
+    year = {2020}
+    }
+```
 # Acknowledge
 Trade fine-tuning code from [TRADE](https://github.com/yaodongyu/TRADES) (official code). 
