@@ -207,7 +207,7 @@ class proj_head(nn.Module):
         x = self.fc2(x)
         x = self.bn2([x, bn_name])
 
-        if self.twoLayerProj:
+        if not self.twoLayerProj:
             x = self.relu(x)
 
             x = self.fc3(x)
