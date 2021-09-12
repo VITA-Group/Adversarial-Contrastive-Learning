@@ -23,9 +23,11 @@ Note that, whenever more than one encoder branches co-exist in one framework, th
 encoders will use independent BN parameters.
 ## Environment requirements
 * Python (3.6.4)
-* Pytorch (1.6.0)
+* Pytorch (1.5.0)
 * CUDA
 * numpy
+
+Thanks to the question from Muhammad Zaid Hameed, we found that there **would be a performance drop when using other Pytorch versions**. Please use pytorch 1.5.0 or 1.5.1 for reproducing our results.
 
 ## Pretraining
 Pretrain the model on CIFAR-10 with ACL(DS)
@@ -66,10 +68,18 @@ python train_trades_cifar10_semisupervised.py ACL_DS_SEMI_STAGE3_0.1LABELS --che
 ### Pretraining
 [[ACL_DS]](https://drive.google.com/file/d/1d5gZgqMpXl0-RiWH6sUcBvZZXJc2OrRF/view?usp=sharing)
 
-To finetune from this checkpoint: use /path/to/downloadedCheckpoint for --checkpoint. For example
+Pretraining model on CIFAR10. To finetune from this checkpoint: use /path/to/downloadedCheckpoint for --checkpoint. For example
 ```bash
 python train_trades.py ACL_DS_TUNE --checkpoint /path/to/downloadedCheckpoint --cvt_state_dict --bnNameCnt 1 --data /path/to/data
 ```
+
+[[ACL_DS_CIFAR100]](https://drive.google.com/file/d/1DT5cnCsIDzhch5zoCitQRcWLmopdQsaJ/view?usp=sharing)
+
+Pretraining model on CIFAR100. To finetune from this checkpoint: use /path/to/downloadedCheckpoint for --checkpoint. For example
+```bash
+CUDA_VISIBLE_DEVICES=0 python train_trades.py ACL_DS_TUNE_CIFAR100 --checkpoint checkpoints/ACL_DS_CIFAR100/ACL_DS_CIFAR100.pt --cvt_state_dict --bnNameCnt 1 --decreasing_lr 10,15 --epochs 20 --dataset cifar100
+```
+
 ### Finetuning
 [[ACL_DS_TUNE]](https://drive.google.com/file/d/1zLK5OTxaPkWK-i7MaGor7RnLKRYY9p-l/view?usp=sharing)
 
